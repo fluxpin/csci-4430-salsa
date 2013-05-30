@@ -1,0 +1,46 @@
+module seqalign;
+
+import java.lang.Math;
+
+behavior SeqAlignWorker {
+    // Align our sequence pairs and insert them into a priority queue keyed
+    // by distance. Return the three best-aligned pairs.
+    AlignList findBest3(PairList pairs) {
+        PriorityQueue queue = new PriorityQueue();
+        join {
+            for (int i = 0; i < pairs.size(); ++i) {
+                self<-align(pairs.get(i)[0], pairs.get(i)[1]) @
+                self<-alignBuilder(pairs.get(i), token) @
+                queue<-insert(token);
+            }
+        } @ queue<-getQueue() @ currentContinuation;
+    }
+
+    // Align a sequence pair using the traditional dynamic programming
+    // algorithm
+    int align(String x, String y) {
+        int[][] dist = new int[x.length() + 1][y.length() + 1];
+        for (int i = 0; i <= x.length(); ++i) {
+            for (int j = 0; j <= y.length(); ++j) {
+                if (i == 0) {
+                    dist[i][j] = 2 * j;
+                } else if (j == 0) {
+                    dist[i][j] = 2 * i;
+                } else {
+                    dist[i][j] = Math.min(Math.min(dist[i - 1][j] + 2,
+                                                   dist[i][j - 1] + 2),
+                                          dist[i - 1][j - 1] +
+                                          (x.charAt(i - 1) == y.charAt(j - 1) ? 0 : 1));
+                }
+            }
+        }
+        return dist[x.length()][y.length()];
+    }
+
+    Align alignBuilder(String[] pair, int dist) {
+        Align x = new Align();
+        x.pair = pair;
+        x.dist = dist;
+        return x;
+    }
+}

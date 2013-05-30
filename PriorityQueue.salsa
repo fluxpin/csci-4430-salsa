@@ -1,0 +1,40 @@
+module seqalign;
+
+// Basic, non-generic priority queue-like object. Java 1.4 doesn't seem to
+// have anything similar.
+behavior PriorityQueue {
+    AlignList queue = new AlignList(4);
+
+    // Insertion *must* be atomic
+    void insert(Align x) {
+        int i = 0;
+        while (i < queue.size() && queue.get(i).dist <= x.dist) {
+            ++i;
+        }
+        queue.add(i, x);
+        if (queue.size() > 3) {
+            queue.remove(queue.size() - 1);
+        }
+    }
+
+    Object[] insertAll(AlignList x) {
+        join {
+            for (int i = 0; i < x.size(); ++i) {
+                self<-insert(x.get(i));
+            }
+        } @ self<-joinContinuation(token) @ currentContinuation;
+    }
+
+    AlignList getQueue() {
+        return queue;
+    }
+
+    //////////////////////
+    // Helper Functions //
+    //////////////////////
+
+    // join {} @ currentContinuation is broken in SALSA 1.1.5
+    Object[] joinContinuation(Object[] tokens) {
+        return tokens;
+    }
+}

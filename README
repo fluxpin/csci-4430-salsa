@@ -1,0 +1,30 @@
+The SALSA source for my solution to a ProgLang problem.
+
+SALSA is an actor-oriented language based on Java under development at
+Rensselaer Polytechnic Institute. The version needed to build and run the
+program is included in this repository.
+
+**Sequence Alignment**
+
+The program solves the sequence alignment problem and prints some
+statistics related to the solution, including the three best-aligned
+sequence pairs.
+
+To use the program, start the SALSA name server:
+
+    java -cp salsa-1.1.5.jar wwc.naming.WWCNamingServer
+
+and all the theaters listed in the theaters file, beginning with the
+*second* line (the first line is the name server):
+
+    java -cp salsa-1.1.5.jar:. wwc.messaging.Theater $PORT
+
+then run the program:
+
+    java -cp salsa-1.1.5.jar:. seqalign.SeqAlign seqs nactors theaters
+
+**Building**
+
+The program is written in SALSA with some Java code to work around the lack
+of generics support in the SALSA compiler. It can be built with the
+included Makefile.

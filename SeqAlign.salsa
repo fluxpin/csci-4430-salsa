@@ -1,0 +1,157 @@
+module seqalign;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+
+behavior SeqAlign {
+    long stime;
+
+    int nseqs;
+    int nactors;
+    int ntheaters;
+
+    //////////
+    // main //
+    //////////
+
+    void act(String[] argv) {
+        if (argv.length < 3) {
+            standardOutput<-println("Args: seqs nactors theatres") @
+            self<-exitFailure();
+        } else {
+            self<-actHelper(argv);
+        }
+    }
+
+    void actHelper(String[] argv) {
+        stime = System.currentTimeMillis();
+
+        String seqp = argv[0];
+        nactors = Integer.parseInt(argv[1]);
+        String theatersp = argv[2];
+
+        token theaters = self<-readTheaters(theatersp);
+        token seqs = self<-readSeqs(seqp);
+        token workers = self<-createWorkers(theaters);
+
+        self<-pairSeqs(seqs) @
+        self<-assignPairs(token, workers) @
+        self<-collectAligns(token) @
+        self<-printResults(token);
+    }
+
+    ////////////////////
+    // Initialization //
+    ////////////////////
+
+    StringList readTheaters(String theatersp) throws Exception {
+        StringList theaters = new StringList();
+
+        BufferedReader theatersf = new BufferedReader(new FileReader(theatersp));
+        String line;
+        while ((line = theatersf.readLine()) != null) {
+            theaters.add(line);
+        }
+        theatersf.close();
+
+        ntheaters = theaters.size() - 1;
+        return theaters;
+    }
+
+    StringList readSeqs(String seqp) throws Exception {
+        StringList seqs = new StringList();
+
+        BufferedReader seqf = new BufferedReader(new FileReader(seqp));
+        String line;
+        while ((line = seqf.readLine()) != null) {
+            seqs.add(line);
+        }
+        seqf.close();
+
+        nseqs = seqs.size();
+        return seqs;
+    }
+
+    // Create workers and distribute them evenly across theaters
+    SeqAlignWorker[] createWorkers(StringList theaters) {
+        SeqAlignWorker[] workers = new SeqAlignWorker[nactors];
+        for (int i = 0; i < nactors; ++i) {
+            workers[i] = new SeqAlignWorker() at (new UAN(String.format("uan://%s/a%d", theaters.get(0), i)),
+                                                  new UAL(String.format("rmsp://%s/a%d", theaters.get((i % ntheaters) + 1), i)));
+        }
+        return workers;
+    }
+
+    /////////////////////////
+    // Sequence Processing //
+    /////////////////////////
+
+    PairList pairSeqs(StringList seqs) {
+        PairList pairs = new PairList();
+        for (int i = 0; i < nseqs - 1; ++i) {
+            for (int j = i + 1; j < nseqs; ++j) {
+                pairs.add(new String[] {seqs.get(i), seqs.get(j)});
+            }
+        }
+        return pairs;
+    }
+
+    // Distribute pairs evenly across workers
+    Object[] assignPairs(PairList pairs, SeqAlignWorker[] workers) {
+        PairList[] assignedPairs = new PairList[nactors];
+        for (int i = 0; i < pairs.size(); ++i) {
+            if (i < nactors) {
+                assignedPairs[i] = new PairList();
+            }
+            assignedPairs[i % nactors].add(pairs.get(i));
+        }
+        join {
+            for (int i = 0; i < nactors; ++i) {
+                workers[i]<-findBest3(assignedPairs[i]);
+            }
+        } @ self<-joinContinuation(token) @ currentContinuation;
+    }
+
+    AlignList collectAligns(Object[] best3) {
+        PriorityQueue queue = new PriorityQueue();
+        join {
+            for (int i = 0; i < best3.length; ++i) {
+                queue<-insertAll((AlignList)best3[i]);
+            }
+        } @ queue<-getQueue() @ currentContinuation;
+    }
+
+    void printResults(AlignList best3) {
+        long etime = System.currentTimeMillis();
+        standardOutput<-println(String.format("sequences: %d, actors: %d, theaters: %d",
+                                              nseqs, nactors, ntheaters)) @
+        standardOutput<-println("most similar pairs:") @
+        standardOutput<-println(String.format("distance(%s, %s) = %d",
+                                              best3.get(0).pair[0],
+                                              best3.get(0).pair[1],
+                                              best3.get(0).dist)) @
+        standardOutput<-println(String.format("distance(%s, %s) = %d",
+                                              best3.get(1).pair[0],
+                                              best3.get(1).pair[1],
+                                              best3.get(1).dist)) @
+        standardOutput<-println(String.format("distance(%s, %s) = %d",
+                                              best3.get(2).pair[0],
+                                              best3.get(2).pair[1],
+                                              best3.get(2).dist)) @
+        standardOutput<-println(String.format("total running time: %d ms",
+                                              etime - stime));
+    }
+
+    //////////////////////
+    // Helper Functions //
+    //////////////////////
+
+    // join {} @ currentContinuation is broken in SALSA 1.1.5
+    Object[] joinContinuation(Object[] tokens) {
+        return tokens;
+    }
+
+    void exitFailure() {
+        System.exit(1);
+    }
+}
